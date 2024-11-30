@@ -93,16 +93,30 @@ void load_signatures(){
         printf("Failed to read filename.\n");
         return;
     }
-
+    filename[strcspn(filename, "\n")] = 0; //removing the newline
     FILE *infile = fopen(filename, "rb"); //holds the data of all viruses
     if (infile == NULL){
         printf("Error in opening file\n");
         return;
     }
+    printf("File opened\n");
+
+    /*Added this function*/
+    if (virus_list == NULL){
+        virus_list = malloc(sizeof(link));
+        virus_list->nextVirus = NULL;
+    }
+
+
+    /*Hendling allocating new size to NULL link*/
     while(!feof(infile)){
         virus* v = readVirus(infile);
         if (v == NULL){
             break;
+        }
+        if (virus_list->nextVirus == NULL){
+            virus_list->nextVirus = malloc(sizeof(link));
+            virus_list->vir = malloc(sizeof(virus));
         }
         virus_list->nextVirus->vir = v;  //adding the virus to the list
     }
@@ -146,6 +160,8 @@ void fix_file(){
     printf("Not implemented\n");
 }
 
+
+/*Maybe change the siganture so it will take the virus_list? */
 void printSignature(FILE *file){
     char buffer[sizeof(unsigned char)];
 
@@ -176,7 +192,7 @@ int main(int argc, char **argv) //stack arguments
     carray[0] = '\0'; //The pointer points to '0'
 
 
-    struct fun_desc menu[] = { { "Load signatures", load_signatures}, { "Print signatures", printVirus }, { "Detect viruses", detect_virus_helper },
+    struct fun_desc menu[] = { { "Load signatures", load_signatures}, { "Print signatures", printSignature }, { "Detect viruses", detect_virus_helper },
     {"Fix file" ,fix_file} ,{"Quit" , stop_program},{NULL , NULL} };
     
     while (1){
@@ -184,7 +200,7 @@ int main(int argc, char **argv) //stack arguments
     printf("Select opration from the following menu : \n");
 
     for (int i=0; menu[i].name!=NULL; i++ ){
-        printf("%d : %s\n", i, menu[i].name);
+        printf("%d : %s\n", i+1, menu[i].name);
 
     }
 
@@ -192,7 +208,7 @@ int main(int argc, char **argv) //stack arguments
      if (fgets(inputBuffer, sizeof(inputBuffer) , stdin) == NULL){ //No input from user
         break;
      }
-     int choice = inputBuffer[0] -'0'; //getting the real int value - the first is always the choice
+     int choice = inputBuffer[0] -'0'-1; //getting the real int value - the first is always the choice
 
 
         if (!(choice>=0 && choice<=5)){
@@ -202,7 +218,7 @@ int main(int argc, char **argv) //stack arguments
        
         printf("Within bounds\n");
         
-   
+        menu[choice].fun();
 
 
     }
