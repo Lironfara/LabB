@@ -1,7 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 int MAX_LENGTH = 10000;
+int MAGIC_SIZE = 4;
+bool needToChange = false; //little need to change
 
 typedef struct virus{
     unsigned short SigSize; //the virus size to allocate
@@ -23,6 +26,9 @@ virus* readVirus(FILE* file){
         return NULL;
     }
     fread(v, 1, 18, file); //for size and name
+    if(needToChange){
+        v->SigSize = ((v->SigSize) >> 8) | ((v->SigSize) << 8);
+    }
     v->sig = malloc(v->SigSize); 
     if (v->sig == NULL){
         free(v);
@@ -32,15 +38,42 @@ virus* readVirus(FILE* file){
     //reading from file - from location of AFTER 18 bytes
     return v;
 }
+//05 00 56 49 52 55 53 00 00 00 00 00 00 00 00 00 00 00 31 32 33 34 35
 
 void printVirus(virus* virus, FILE* output){
-    fprintf(output, "Virus name: %s\n", virus->virusName);
-    fprintf(output, "Virus size: %d\n", virus->SigSize);
-    fprintf(output, "signature:\n");
-    for (int i = 0; i < virus->SigSize; i++){
-        fprintf(output, "%02hhX ", virus->sig[i]);
+     printf("Enter output file name: ");
+    char filename[256];
+    //for getting the filename
+    if (fgets(filename, sizeof(filename), stdin) == NULL) {
+        printf("Failed to read filename.\n");
+        return;
     }
+    filename[strcspn(filename, "\n")] = 0; //removing the newline
+    FILE *file = fopen(filename, "w"); //holds the data of all viruses
+    if (file == NULL){
+        printf("Error in opening file\n");
+        return;
+    }
+    printf("File opened\n");
+    
+
+    if (output == NULL){
+        printf("%s",virus->virusName);
+        printf("%x", virus->SigSize);
+        for (int i = 0; i < virus->SigSize; i++){
+            printf("%02hhX ", virus->sig[i]);
+        }
+    }
+    else{
+        fprintf(output, "Virus name: %s\n", virus->virusName);
+        fprintf(output, "Virus size: %d\n", virus->SigSize);
+        fprintf(output, "signature:\n");
+        for (int i = 0; i < virus->SigSize; i++){
+            fprintf(output, "%02hhX ", virus->sig[i]);
+        }
     fprintf(output, "\n\n");
+    }
+    
 }
 
 
@@ -85,7 +118,6 @@ void list_free(link *virus_list){
 }
 
 void load_signatures(){
-    /*fill up virus_list the global varialb with signature from a file given by the user*/
     printf("Enter the file name: ");
     char filename[256];
     //for getting the filename
@@ -94,31 +126,51 @@ void load_signatures(){
         return;
     }
     filename[strcspn(filename, "\n")] = 0; //removing the newline
-    FILE *infile = fopen(filename, "rb"); //holds the data of all viruses
-    if (infile == NULL){
+    FILE *file = fopen(filename, "r"); //holds the data of all viruses
+    if (file == NULL){
         printf("Error in opening file\n");
         return;
     }
-    printf("File opened\n");
 
+    unsigned char magic[MAGIC_SIZE];
+     if (fread(magic, 1, MAGIC_SIZE, file) != MAGIC_SIZE) {
+        fprintf(stderr, "Error reading magic number\n");
+        return;
+    }
+    if (memcmp(magic, "VIRL", MAGIC_SIZE) == 0) {
+    }
+    // Check for big-endian magic number
+    else if (memcmp(magic, "VIRB", MAGIC_SIZE) == 0) {
+        needToChange = true;
+    } else {
+        printf("Unknown or invalid magic number\n");
+    }
+    /*fill up virus_list the global varialb with signature from a file given by the user*/
+    
     /*Added this function*/
     if (virus_list == NULL){
         virus_list = malloc(sizeof(link));
+                virus_list->vir = NULL;
         virus_list->nextVirus = NULL;
     }
 
+    link* current = virus_list;
 
     /*Hendling allocating new size to NULL link*/
-    while(!feof(infile)){
-        virus* v = readVirus(infile);
-        if (v == NULL){
+    while(!feof(file)){
+        virus* v = readVirus(file);
+        if (current->vir == NULL) {
+        current->vir = v;
+        } else if (v->SigSize==0){
             break;
+        }else {
+        /* Otherwise, create a new node and link it */
+        current->nextVirus = malloc(sizeof(link));
+        current = current->nextVirus;
+        current->vir = v;
+        current->nextVirus = NULL;
         }
-        if (virus_list->nextVirus == NULL){
-            virus_list->nextVirus = malloc(sizeof(link));
-            virus_list->vir = malloc(sizeof(virus));
-        }
-        virus_list->nextVirus->vir = v;  //adding the virus to the list
+    
     }
 }
 
@@ -162,16 +214,16 @@ void fix_file(){
 
 
 /*Maybe change the siganture so it will take the virus_list? */
-void printSignature(FILE *file){
-    char buffer[sizeof(unsigned char)];
-
-    if (file == NULL){
+void printSignature(){
+    if (virus_list == NULL){
         return;
     }
-    else{
-        fread(buffer, 1, sizeof(unsigned char), file); //reading sig from file
+
+   link* current = virus_list;  // Start at the head of the list
+    while (current != NULL) {
+        printVirus(current->vir, stdout);  // Print the virus data
+        current = current->nextVirus;     // Move to the next link
     }
-    printf("Signature: %s\n", buffer);
 }
 
 void stop_program(){
@@ -204,14 +256,13 @@ int main(int argc, char **argv) //stack arguments
 
     }
 
-     printf("Please enter youre choice (value between 0-5) : \n");
+     printf("Please enter youre choice (value between 1-5) : \n");
      if (fgets(inputBuffer, sizeof(inputBuffer) , stdin) == NULL){ //No input from user
         break;
      }
      int choice = inputBuffer[0] -'0'-1; //getting the real int value - the first is always the choice
 
-
-        if (!(choice>=0 && choice<=5)){
+        if (!(choice>=0 && choice<=4)){
             printf("Not within bounds, %d", choice);
             break;
         }
