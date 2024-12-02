@@ -173,7 +173,10 @@ void detect_virus(char *buffer, unsigned int size, link *virus_list){
         for (int i = 0; i < size; ++i){
             if (memcmp(buffer + i, v->vir->sig, v->vir->SigSize) == 0){
                 found = true;
-                printf("Virus detected: %s, at offset %d\n", v->vir->virusName, i);
+                printf("Virus detected!\n");
+                printf("The starting byte location in the suspected file %d\n", i);
+                printf("The virus name is: %s\n", v->vir->virusName);
+                printf("The size of the virus signature is: %d\n", v->vir->SigSize);
             }         
         }
         v = v->nextVirus;
