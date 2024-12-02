@@ -104,6 +104,7 @@ void list_free(link *virus_list){
         free(current);
         current = nextVir;
     }
+
 }
 
 void load_signatures(){
@@ -151,6 +152,8 @@ void load_signatures(){
         if (current->vir == NULL) {
         current->vir = v;
         } else if (v->SigSize==0){
+            free(v->sig);
+            free(v);
             break;
         }else {
         /* Otherwise, create a new node and link it */
@@ -207,6 +210,7 @@ void detect_virus_helper (){
     fread(buffer, 1, 10000, infile);
     detect_virus(buffer, 10000, virus_list);
     free(buffer);
+    fclose(infile);
 }
 
 void neutralize_virus(char *fileName, int signatureOffset){
