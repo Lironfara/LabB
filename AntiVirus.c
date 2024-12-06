@@ -24,16 +24,18 @@ link* virus_list = NULL;
 virus* readVirus(FILE* file){
     virus* v = malloc(sizeof(virus));
     if (v == NULL){
-        free(v);
         return NULL;
     }
     fread(v, 1, 18, file); //for size and name
     if(needToChange){
         v->SigSize = ((v->SigSize) >> 8) | ((v->SigSize) << 8);
     }
+    if (v->SigSize == 0 || v==NULL){
+        free(v);
+        return NULL;
+    }   
     v->sig = malloc(v->SigSize); 
     if (v->sig == NULL){
-        free(v->sig);
         free(v);
         return NULL;
     }
@@ -53,7 +55,6 @@ void printVirus(virus* virus, FILE* output){
         }
     }
     else{
-        printf("I am here\n");
         fprintf(output, "Virus name: %s\n", virus->virusName);
         fprintf(output, "Virus size: %d\n", virus->SigSize);
         fprintf(output, "signature:\n");
@@ -75,20 +76,33 @@ void list_print(link *virus_list , FILE* file){
 }
 
 
-/* Add a new link with the given data to the list (at the end CAN ALSO AT BEGINNING), 
-and return a pointer to the list (i.e., the first link in the list).
-If the list is null - create a new entry and return a pointer to the entry. */
-link* list_append(link* virus_list, virus* data){
-    if (virus_list == NULL){
-        link* newlink = malloc(sizeof(link));
-        newlink->vir = data;
-        return newlink;
+link* list_append(link* virus_list, virus* data) {
+    if (data==NULL || data->SigSize == 0 || data->sig == NULL){
+            if (data!=NULL){
+                free(data);
+                free(data->sig);
+            }
+            return virus_list;
     }
-    else{
-        virus_list->nextVirus->vir = data;
+    link* newLink = malloc(sizeof(link));
+    if (newLink == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
         return virus_list;
     }
+    newLink->vir = data;
+    newLink->nextVirus = NULL;
+    if (virus_list == NULL) {
+        virus_list = newLink;
+    } else { //adding the new link to the end of the list
+        link* current = virus_list;
+        while (current->nextVirus != NULL) {
+            current = current->nextVirus; //moving in the linked list
+        }
+        current->nextVirus = newLink;
+    }
+    return virus_list;
 }
+
 
 /* Free the memory allocated by the list. */
 void list_free(link *virus_list){
@@ -99,13 +113,16 @@ void list_free(link *virus_list){
     link* current = virus_list;
     while(current != NULL){
         link* nextVir = current->nextVirus;
-        free(current->vir->sig);
-        free(current->vir);
+          if (current->vir != NULL){
+            free(current->vir->sig); // free signature memory
+            free(current->vir); // free virus structure memory
+        }
         free(current);
         current = nextVir;
     }
 
 }
+
 
 void load_signatures(){
     printf("Enter the file name: ");
@@ -144,24 +161,11 @@ void load_signatures(){
         virus_list->nextVirus = NULL;
     }
 
-    link* current = virus_list;
 
     /*Hendling allocating new size to NULL link*/
     while(!feof(file)){
         virus* v = readVirus(file);
-        if (current->vir == NULL) {
-        current->vir = v;
-        } else if (v->SigSize==0){
-            free(v->sig);
-            free(v);
-            break;
-        }else {
-        /* Otherwise, create a new node and link it */
-        current->nextVirus = malloc(sizeof(link));
-        current = current->nextVirus;
-        current->vir = v;
-        current->nextVirus = NULL;
-        }
+        virus_list = list_append(virus_list, v);
     
     }
     fclose(file);
@@ -173,7 +177,7 @@ void detect_virus(char *buffer, unsigned int size, link *virus_list){
     bool found = false;
     link* v = virus_list;
     while (v != NULL){
-        for (int i = 0; i < size; ++i){
+        for (int i = 0; i < size && v->vir!=NULL ; ++i){
             if (memcmp(buffer + i, v->vir->sig, v->vir->SigSize) == 0){
                 found = true;
                 printf("Virus detected!\n");
@@ -248,7 +252,7 @@ int* find_offset(char *buffer, unsigned int size, link *virus_list){
     int counter = 0;
     link* v = virus_list;
     while (v != NULL){
-        for (int i = 0; i < size; ++i){
+        for (int i = 0; i < size && v->vir!=NULL ; ++i){
             if (memcmp(buffer + i, v->vir->sig, v->vir->SigSize) == 0){
                 offsets[counter] = i;
                 counter++;
@@ -325,8 +329,11 @@ void printSignature(){
     
    link* current = virus_list;  // Start at the head of the list
     while (current != NULL) {
-        printVirus(current->vir, file);  // Print the virus data
+        if (current->vir != NULL){
+            printVirus(current->vir, file);  // Print the virus data
+        }
         current = current->nextVirus;     // Move to the next link
+        
     }
     if (file!=NULL){
         fclose(file);
@@ -375,6 +382,7 @@ int main(int argc, char **argv) //stack arguments
 
         if (!(choice>=0 && choice<=4)){
             printf("Not within bounds, %d", choice);
+            stop_program();
             break;
         }
        
