@@ -26,11 +26,14 @@ virus* readVirus(FILE* file){
     if (v == NULL){
         return NULL;
     }
-    fread(v, 1, 18, file); //for size and name
+    if (fread(v, 1, 18, file) != 18) { // Check if 18 bytes were read
+        free(v);
+        return NULL;
+    }
     if(needToChange){
         v->SigSize = ((v->SigSize) >> 8) | ((v->SigSize) << 8);
     }
-    if (v->SigSize == 0 || v==NULL){
+    if (v==NULL || v->SigSize == 0){ 
         free(v);
         return NULL;
     }   
@@ -39,8 +42,11 @@ virus* readVirus(FILE* file){
         free(v);
         return NULL;
     }
-    fread(v->sig, 1, v->SigSize, file); //pointer to where to store - v->sig, char size of v->SigSize from file
-    //reading from file - from location of AFTER 18 bytes
+    if (fread(v->sig, 1, v->SigSize, file) != v->SigSize) { // Check if SigSize bytes were read
+        free(v->sig);
+        free(v);
+        return NULL;
+    }
     return v;
 }
 //05 00 56 49 52 55 53 00 00 00 00 00 00 00 00 00 00 00 31 32 33 34 35
@@ -126,7 +132,7 @@ void list_free(link *virus_list){
 
 void load_signatures(){
     printf("Enter the file name: ");
-    char filename[256];
+    char filename[256] ={0};
     //for getting the filename
     if (fgets(filename, sizeof(filename), stdin) == NULL) {
         printf("Failed to read filename.\n");
@@ -151,22 +157,28 @@ void load_signatures(){
         needToChange = true;
     } else {
         printf("Unknown or invalid magic number\n");
+        fclose(file);
+        return;
+        
     }
     /*fill up virus_list the global varialb with signature from a file given by the user*/
     
     /*Added this function*/
     if (virus_list == NULL){
         virus_list = malloc(sizeof(link));
-                virus_list->vir = NULL;
+        virus_list->vir = NULL;
         virus_list->nextVirus = NULL;
     }
 
 
     /*Hendling allocating new size to NULL link*/
+    printf("Loading\n");
     while(!feof(file)){
         virus* v = readVirus(file);
+        if (v == NULL){
+            break;
+        }
         virus_list = list_append(virus_list, v);
-    
     }
     fclose(file);
     printf("Loaded\n");
@@ -174,10 +186,14 @@ void load_signatures(){
 
 //all viruses in the file
 void detect_virus(char *buffer, unsigned int size, link *virus_list){
+    if (virus_list == NULL){
+        return;
+    }
     bool found = false;
     link* v = virus_list;
     while (v != NULL){
-        for (int i = 0; i < size && v->vir!=NULL ; ++i){
+        if (v->vir!=NULL && v->vir->sig!=NULL &&v->vir->SigSize != 0){
+        for (unsigned int i = 0; i < size - v->vir->SigSize ; ++i){
             if (memcmp(buffer + i, v->vir->sig, v->vir->SigSize) == 0){
                 found = true;
                 printf("Virus detected!\n");
@@ -186,7 +202,8 @@ void detect_virus(char *buffer, unsigned int size, link *virus_list){
                 printf("The size of the virus signature is: %d\n", v->vir->SigSize);
             }         
         }
-        v = v->nextVirus;
+    }
+    v = v->nextVirus;
     }
     if (!found){
         printf("No virus detected\n");
@@ -211,8 +228,8 @@ void detect_virus_helper (){
     }
 
     char *buffer = malloc(10000);
-    fread(buffer, 1, 10000, infile);
-    detect_virus(buffer, 10000, virus_list);
+    size_t bytesRead = fread(buffer, 1, 10000, infile);
+    detect_virus(buffer, bytesRead, virus_list);
     free(buffer);
     fclose(infile);
 }
@@ -243,6 +260,7 @@ void neutralize_virus(char *fileName, int signatureOffset){
     fclose(file);
 }
 
+
 int* find_offset(char *buffer, unsigned int size, link *virus_list){
     int* offsets = malloc(sizeof(int)*10000);
     if(offsets == NULL){
@@ -252,12 +270,14 @@ int* find_offset(char *buffer, unsigned int size, link *virus_list){
     int counter = 0;
     link* v = virus_list;
     while (v != NULL){
-        for (int i = 0; i < size && v->vir!=NULL ; ++i){
+        if (v->vir!=NULL && v->vir->sig!=NULL &&v->vir->SigSize != 0){
+        for (unsigned int i = 0; i < size - v->vir->SigSize ; ++i){
             if (memcmp(buffer + i, v->vir->sig, v->vir->SigSize) == 0){
                 offsets[counter] = i;
                 counter++;
             } 
         }
+    }
         v = v->nextVirus;
     }
     offsets[counter] = -1;
@@ -281,11 +301,12 @@ void fix_file(){
     }
 
     char *buffer = malloc(10000);
-    fread(buffer, 1, 10000, infile);
-    int* offsets = find_offset(buffer, 10000, virus_list); //loactions of the viruses
+    size_t bytesRead = fread(buffer, 1, 10000, infile);
+    int* offsets = find_offset(buffer, bytesRead, virus_list); //loactions of the viruses
     int counter = 0;
     while(offsets[counter]!=-1){
         int signatureOffset = offsets[counter];
+        printf("Virus found at offset %d\n", signatureOffset);
         neutralize_virus(fileName, signatureOffset);
         counter++;
     }
@@ -374,7 +395,7 @@ int main(int argc, char **argv) //stack arguments
 
     }
 
-     printf("Please enter youre choice (value between 1-5) : \n");
+     printf("Please enter your choice (value between 1-5) : \n");
      if (fgets(inputBuffer, sizeof(inputBuffer) , stdin) == NULL){ //No input from user
         break;
      }
